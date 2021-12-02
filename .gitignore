@@ -1,5 +1,7 @@
 /target
 *~
+/input
+*.swp
 
 # Added by cargo
 #
