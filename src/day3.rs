@@ -65,23 +65,26 @@ fn find_wanted_rating<'a, T,U>(iterator : T, max_len : usize, comparison : U) ->
     }
 }
 
-fn find_oxygen_rating<'a, T>(iterator : T, max_len : usize) -> Option<&'a u32> 
-    where T : Iterator<Item=&'a u32>+Clone
+type Solver<'a, T> = fn(T, usize, fn(usize, usize)->bool) -> Option<&'a u32>;
+
+fn find_oxygen_rating<'a, T>(iterator : T, max_len : usize, solver : Solver<'a, T>) -> Option<&'a u32> 
+    where T : Iterator<Item=&'a u32>+Clone,
 {
-    find_wanted_rating(iterator, max_len, |a,b| a>=b)
+    solver(iterator, max_len, |a,b| a>=b)
 }
 
-fn find_co2_rating<'a,T>(iterator : T, max_len : usize) -> Option<&'a u32>
+fn find_co2_rating<'a,T>(iterator : T, max_len : usize, solver : Solver<'a, T>) -> Option<&'a u32>
     where T : Iterator<Item=&'a u32>+Clone
 {
-    find_wanted_rating(iterator, max_len, |a,b| a<b)
+    solver(iterator, max_len, |a,b| a<b)
 }
 
-#[aoc(day3, part2)]
+#[aoc(day3, part2, CloneableIterator)]
 pub fn solve_part2((input, max_len) : &(Vec<u32>, usize)) -> Option<u32> {
-    let oxygen_rating = find_oxygen_rating(input.iter(),*max_len);
+    let solver = find_wanted_rating;
+    let oxygen_rating = find_oxygen_rating(input.iter(),*max_len, solver);
     oxygen_rating.and_then(|oxygen_rating| {
-        find_co2_rating(input.iter(), *max_len).map(|co2_rating| co2_rating * oxygen_rating)
+        find_co2_rating(input.iter(), *max_len,solver).map(|co2_rating| co2_rating * oxygen_rating)
     })
 }
 
@@ -109,16 +112,16 @@ mod day3_tests{
     }
 
     #[test]
-    fn test_find_oxygen_rating() {
+    fn test_find_oxygen_rating_clonable_iterator() {
         let data = get_day3_processed_testdata();
-        let result = find_oxygen_rating(data.0.iter(),data.1);
+        let result = find_oxygen_rating(data.0.iter(),data.1, find_wanted_rating);
         assert_eq!(result, Some(&23))
     }
 
     #[test]
-    fn test_find_co2_rating() {
+    fn test_find_co2_rating_clonable_iterator() {
         let data = get_day3_processed_testdata();
-        let result = find_co2_rating(data.0.iter(), data.1);
+        let result = find_co2_rating(data.0.iter(), data.1, find_wanted_rating);
         assert_eq!(result, Some(&10))
     }
 
