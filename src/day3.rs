@@ -1,5 +1,4 @@
 use aoc_runner_derive::*;
-use dyn_clone::{clone_trait_object, DynClone};
 
 #[aoc_generator(day3)]
 pub fn input_generator<'c>(input : &'c str) -> (Vec<u32>,usize){ 
@@ -26,9 +25,22 @@ pub fn solve_part1((input,max_len) : &(Vec<u32>,usize)) -> usize {
     gamma_rate * epsilon_rate
 }
 
-trait ClonableIterator: Iterator + DynClone {}
-impl<I: Iterator + DynClone> ClonableIterator for I {}
-clone_trait_object!(<T> ClonableIterator<Item = T>);
+trait ClonableIterator<'a>: Iterator<Item = &'a u32> + 'a {
+    fn box_clone(&self) -> Box<dyn ClonableIterator<'a>>;
+}
+
+impl<'a, T: Iterator<Item = &'a u32> + Clone + 'a> ClonableIterator<'a> for T {
+    fn box_clone(&self) -> Box<dyn ClonableIterator<'a>> {
+        Box::new(self.clone())
+    }
+}
+mod helper {
+    impl<'a> Clone for Box<dyn super::ClonableIterator<'a>> {
+        fn clone(&self) -> Self {
+            (*self).box_clone()
+        }
+    }
+}
 
 fn count_ones_and_zeros<'a, T>(iterator : T , bit_from_right : usize) -> (usize, usize)
     where T : Iterator<Item=&'a u32>,
@@ -40,21 +52,21 @@ fn has_record_desired_bit(record : u32, most_common_bit_mask : u32, target : u32
     (record & most_common_bit_mask) == target
 }
 
-fn find_wanted_rating<'a, T,U>(iterator : T, max_len : usize, comparison : U) -> Option<&'a u32>
+fn find_wanted_rating<'a, T : 'a,U>(iterator : T, max_len : usize, comparison : U) -> Option<&'a u32>
     where T : Iterator<Item=&'a u32>+Clone,
           U : Fn(usize,usize)->bool
 {
     use std::ops::ControlFlow as Cf;
-    let init : Box<dyn ClonableIterator<Item=&'a u32>> = Box::new(iterator);
+    let init : Box<dyn ClonableIterator<'a>> = Box::new(iterator);
     let result = (0..max_len).rev().try_fold(init,|iterator, bit_from_right| {
         let mask = 1 << bit_from_right;
-        let (ones, zeros) = count_ones_and_zeros(iterator.clone(), bit_from_right);
+        let (ones, zeros) = count_ones_and_zeros((iterator).clone(), bit_from_right);
         match ones + zeros {
             0 | 1 => { Cf::Break(iterator) }
             _ => {
                 let target_bit_value = if comparison(ones, zeros) { mask } else { 0 };
                 let filtered = iterator.filter(move |&&value| has_record_desired_bit(value,mask,target_bit_value));
-                let boxed : Box<dyn ClonableIterator<Item=&'a u32>> = Box::new(filtered);
+                let boxed : Box<dyn ClonableIterator<'a>> = Box::new(filtered);
                 Cf::Continue(boxed)
             }
         }
