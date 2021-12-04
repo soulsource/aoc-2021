@@ -40,35 +40,41 @@ fn has_record_desired_bit(record : u32, most_common_bit_mask : u32, target : u32
     (record & most_common_bit_mask) == target
 }
 
-fn find_wanted_rating<'a, T,U>(iterator : T, max_len : usize, comparison : U) -> Option<u32>
+fn find_wanted_rating<'a, T,U>(iterator : T, max_len : usize, comparison : U) -> Option<&'a u32>
     where T : Iterator<Item=&'a u32>+Clone,
           U : Fn(usize,usize)->bool
 {
+    use std::ops::ControlFlow as Cf;
     let init : Box<dyn ClonableIterator<Item=&'a u32>> = Box::new(iterator);
-    let result = (0..max_len).rev().fold(init,|iterator, bit_from_right| {
+    let result = (0..max_len).rev().try_fold(init,|iterator, bit_from_right| {
         let mask = 1 << bit_from_right;
         let (ones, zeros) = count_ones_and_zeros(iterator.clone(), bit_from_right);
-        println!("ones: {}, zeros: {}", ones, zeros);
-        let target_bit_value = if comparison(ones, zeros) { mask } else { 0 };
-        println!("Most common for bit_from_right {} : {}", bit_from_right, target_bit_value);
-        let filtered = iterator.filter(move |&&value| has_record_desired_bit(value,mask,target_bit_value));
-        let boxed : Box<dyn ClonableIterator<Item=&'a u32>> = Box::new(filtered);
-        boxed
+        match ones + zeros {
+            0 | 1 => { Cf::Break(iterator) }
+            _ => {
+                let target_bit_value = if comparison(ones, zeros) { mask } else { 0 };
+                let filtered = iterator.filter(move |&&value| has_record_desired_bit(value,mask,target_bit_value));
+                let boxed : Box<dyn ClonableIterator<Item=&'a u32>> = Box::new(filtered);
+                Cf::Continue(boxed)
+            }
+        }
     });
-    //the problem is formulated in a way that guarantees at least one result.
-    result.take(2).fold(None,|x,y| x.xor(Some(*y)))
+    match result {
+        Cf::Break(mut result) => { result.next() }
+        Cf::Continue(remainder) => { remainder.take(2).fold(None,|x,y| x.xor(Some(y))) }
+    }
 }
 
-fn find_oxygen_rating<'a, T>(iterator : T, max_len : usize) -> Option<u32> 
+fn find_oxygen_rating<'a, T>(iterator : T, max_len : usize) -> Option<&'a u32> 
     where T : Iterator<Item=&'a u32>+Clone
 {
     find_wanted_rating(iterator, max_len, |a,b| a>=b)
 }
 
-fn find_co2_rating<'a,T>(iterator : T, max_len : usize) -> Option<u32>
+fn find_co2_rating<'a,T>(iterator : T, max_len : usize) -> Option<&'a u32>
     where T : Iterator<Item=&'a u32>+Clone
 {
-    find_wanted_rating(iterator, max_len, |a,b| (a+b == 1 && a>b) || (a+b !=1 && a<b))
+    find_wanted_rating(iterator, max_len, |a,b| a<b)
 }
 
 #[aoc(day3, part2)]
@@ -106,14 +112,14 @@ mod day3_tests{
     fn test_find_oxygen_rating() {
         let data = get_day3_processed_testdata();
         let result = find_oxygen_rating(data.0.iter(),data.1);
-        assert_eq!(result, Some(23))
+        assert_eq!(result, Some(&23))
     }
 
     #[test]
     fn test_find_co2_rating() {
         let data = get_day3_processed_testdata();
         let result = find_co2_rating(data.0.iter(), data.1);
-        assert_eq!(result, Some(10))
+        assert_eq!(result, Some(&10))
     }
 
     #[test]
