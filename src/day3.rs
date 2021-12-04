@@ -30,16 +30,13 @@ trait ClonableIterator: Iterator + DynClone {}
 impl<I: Iterator + DynClone> ClonableIterator for I {}
 clone_trait_object!(<T> ClonableIterator<Item = T>);
 
-fn get_most_or_least_common_bit_by_comparison<'a, T, U>(iterator : T , bit_from_right : usize, comparison : &U) -> bool
+fn count_ones_and_zeros<'a, T>(iterator : T , bit_from_right : usize) -> (usize, usize)
     where T : Iterator<Item=&'a u32>,
-        U : Fn(usize,usize)->bool
 {
-    let (ones, zeros) = iterator.fold((0,0), |(ones, zeros), value| if value & (1 <<bit_from_right) != 0 { (ones + 1, zeros) } else { (ones, zeros + 1) });
-    println!("ones: {}, zeros: {}", ones, zeros);
-    comparison(ones,zeros)
+    iterator.fold((0,0), |(ones, zeros), value| if value & (1 <<bit_from_right) != 0 { (ones + 1, zeros) } else { (ones, zeros + 1) })
 }
 
-fn has_record_most_common_bit(record : u32, most_common_bit_mask : u32, target : u32) -> bool {
+fn has_record_desired_bit(record : u32, most_common_bit_mask : u32, target : u32) -> bool {
     (record & most_common_bit_mask) == target
 }
 
@@ -50,9 +47,11 @@ fn find_wanted_rating<'a, T,U>(iterator : T, max_len : usize, comparison : U) ->
     let init : Box<dyn ClonableIterator<Item=&'a u32>> = Box::new(iterator);
     let result = (0..max_len).rev().fold(init,|iterator, bit_from_right| {
         let mask = 1 << bit_from_right;
-        let target_bit_value = if get_most_or_least_common_bit_by_comparison(iterator.clone(),bit_from_right, &comparison) { mask } else { 0 };
+        let (ones, zeros) = count_ones_and_zeros(iterator.clone(), bit_from_right);
+        println!("ones: {}, zeros: {}", ones, zeros);
+        let target_bit_value = if comparison(ones, zeros) { mask } else { 0 };
         println!("Most common for bit_from_right {} : {}", bit_from_right, target_bit_value);
-        let filtered = iterator.filter(move |&&value| has_record_most_common_bit(value,mask,target_bit_value));
+        let filtered = iterator.filter(move |&&value| has_record_desired_bit(value,mask,target_bit_value));
         let boxed : Box<dyn ClonableIterator<Item=&'a u32>> = Box::new(filtered);
         boxed
     });
