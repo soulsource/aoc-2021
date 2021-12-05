@@ -34,11 +34,10 @@ impl<'a, T: Iterator<Item = &'a u32> + Clone + 'a> ClonableIterator<'a> for T {
         Box::new(self.clone())
     }
 }
-mod helper {
-    impl<'a> Clone for Box<dyn super::ClonableIterator<'a>> {
-        fn clone(&self) -> Self {
-            (*self).box_clone()
-        }
+
+impl<'a> Clone for Box<dyn ClonableIterator<'a>> {
+    fn clone(&self) -> Self {
+        self.as_ref().box_clone()
     }
 }
 
