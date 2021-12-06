@@ -14,7 +14,7 @@ mod bingo_internals {
     ///This representation was chosen so unfinished games can be continued (not encountered in aoc, but
     ///I'm doing this as programming training after all...).
     #[derive(Debug,Clone)]
-    struct BingoCard{
+    struct UnfinishedBingoCard{
         rows : [u8;5],
         columns : [u8;5],
         ///the values in the bingo game. Those could be stored in a HashMap, but afaik Rust's
@@ -23,17 +23,18 @@ mod bingo_internals {
         contained_numbers : [BingoNumberState;25]
     }
 
-    pub struct WonBingoCard<'bingo>{
-        card : &'bingo BingoCard
+    #[derive(Debug,Clone,Copy)]
+    struct WonBingoCard{
+        score : usize
     }
 
-    impl WonBingoCard<'_> {
-        pub fn get_score(&self) -> u32 {
-            self.card.get_current_score()
+    impl WonBingoCard {
+        pub fn get_score(&self) -> usize {
+            self.score
         }
     }
 
-    impl BingoCard {
+    impl UnfinishedBingoCard {
         ///Creates a new bingo card from a stream of numbers. The stream must yield 25 numbers. To
         ///allow chaining of card generation, the stream's iterator is returned along with the
         ///result.
@@ -47,7 +48,7 @@ mod bingo_internals {
             match parsed_values.try_into() {
                 Ok(array) => {
                     if Self::validate_contained_numbers(&array) {
-                        (Ok(BingoCard { rows : [0;5], columns : [0;5], contained_numbers : array }), numbers)
+                        (Ok(UnfinishedBingoCard { rows : [0;5], columns : [0;5], contained_numbers : array }), numbers)
                     }
                     else {
                         (Err(InvalidBingoFieldError::DuplicateValue),numbers)
@@ -63,17 +64,7 @@ mod bingo_internals {
                 }
             }
         }
-
-        fn is_won(&self) -> Option<WonBingoCard> {
-            if self.rows.iter().chain(self.columns.iter()).any(|&x| x == 5) {
-                Some(WonBingoCard { card : self })
-            }
-            else {
-                None
-            }
-        }
-
-        fn cross_number(self, number : u8) -> Self {
+        fn cross_number(self, number : u8) -> BingoCard {
             //Sorry for this. Arrays in Rust aren't really functional-style friendly...
             //Yes, this is coding using side effects, but the API is how it is...
             let mut row_and_column = None;
@@ -85,17 +76,29 @@ mod bingo_internals {
                 BingoNumberState::Crossed(_) | BingoNumberState::NotCrossed(_) => { number_state }
             });
             if let Some((row, column)) = row_and_column {
-                let mut rows = self.rows;
-                rows[row as usize] = self.rows[row as usize]+1;
-                let mut columns = self.columns;
-                columns[column as usize] = self.columns[column as usize]+1;
-                Self{rows, columns, contained_numbers : new_state}
+                let new_row_hit_count = self.rows[row as usize] + 1;
+                let new_col_hit_count = self.columns[column as usize] + 1;
+                if new_col_hit_count == 5 || new_row_hit_count == 5 {
+                    BingoCard::Won(WonBingoCard { score : Self::calc_current_score(new_state) })
+                }
+                else {
+                    let mut rows = self.rows;
+                    rows[row as usize] = new_row_hit_count;
+                    let mut columns = self.columns;
+                    columns[column as usize] = new_col_hit_count;
+                    BingoCard::Unfinished(Self{rows, columns, contained_numbers : new_state})
+                }
             }
             else {
-                Self{rows : self.rows, columns : self.columns, contained_numbers : new_state}
+                BingoCard::Unfinished(Self{rows : self.rows, columns : self.columns, contained_numbers : new_state})
             }
         }
-
+        fn calc_current_score(numbers : [BingoNumberState;25]) -> usize {
+            numbers.iter().map(|x| match x {
+                BingoNumberState::NotCrossed(BingoNumber{ value, ..}) => { (*value) as usize }
+                BingoNumberState::Crossed(BingoNumber{ .. }) => { 0usize }
+            }).sum()
+        }
         fn validate_contained_numbers(numbers : &[BingoNumberState;25]) -> bool {
             let bare_values = numbers.iter().map(|x| match x { 
                 BingoNumberState::Crossed(BingoNumber{ value, ..}) => {value}
@@ -105,12 +108,33 @@ mod bingo_internals {
                 prev && bare_values.clone().skip(index+1).fold(true, |prev, other_number| prev && other_number != number)
             })
         }
+    }
 
-        fn get_current_score(&self) -> u32 {
-            self.contained_numbers.iter().map(|x| match x {
-                BingoNumberState::NotCrossed(BingoNumber{ value, ..}) => { (*value) as u32 }
-                BingoNumberState::Crossed(BingoNumber{ .. }) => { 0u32 }
-            }).sum()
+    #[derive(Debug,Clone)]
+    enum BingoCard {
+        Unfinished(UnfinishedBingoCard),
+        Won(WonBingoCard),
+    }
+
+    impl BingoCard {
+        fn new<'a, T, Q>(numbers : T) -> (Result<Self, InvalidBingoFieldError>, T) 
+            where T : Iterator<Item=Q>,
+                  Q : Borrow<u8>
+        {
+            let (result, iterator) = UnfinishedBingoCard::new(numbers);
+            (result.map(|x| BingoCard::Unfinished(x)),iterator)
+        }
+        fn get_score(&self) -> Option<usize> {
+            match self {
+                BingoCard::Won(won_bingo_card) => { Some(won_bingo_card.get_score()) }
+                BingoCard::Unfinished(_) => { None }
+            }
+        }
+        fn cross_number(self, value : u8) -> Self {
+            match self {
+                BingoCard::Won(_) => { self }
+                BingoCard::Unfinished(unfinished_card) => { unfinished_card.cross_number(value) }
+            }
         }
     }
     #[derive(Debug)]
@@ -221,8 +245,8 @@ mod bingo_internals {
             Self{ cards : self.cards.into_iter().map(|x| x.cross_number(value)).collect() }
         }
 
-        pub fn get_winner_cards(&self) -> impl Iterator<Item=WonBingoCard>+Clone+'_ {
-            self.cards.iter().filter_map(|x| x.is_won())
+        pub fn get_winner_cards_scores(&self) -> impl Iterator<Item=usize>+Clone+'_ {
+            self.cards.iter().filter_map(|x| x.get_score())
         }
     }
 
@@ -240,48 +264,78 @@ mod bingo_internals {
         }
         
         #[test]
-        fn test_day3_parse_bingo_game() {
+        fn test_day4_parse_bingo_game() {
             let game = parse_bingo_game(get_day_4_string_testdata());
             assert!(game.is_ok());
             let cards = game.unwrap().cards;
             assert!(cards.len() == 3);
-            assert!((0..3).all(|index| cards[index].contained_numbers.iter().map(|x| match x {
-                BingoNumberState::Crossed(_) => { unreachable!() }
-                BingoNumberState::NotCrossed( BingoNumber{ value , .. }) => { value }
-            }).eq(get_day4_parsed_field_numbers(index).iter())));
-            assert_eq!(cards[1].contained_numbers.iter().find_map(|x| {
-                if let BingoNumberState::NotCrossed( BingoNumber{value, column, row}) = x{
-                    if *value == 17{ Some((row, column)) } else { None}
+            assert!((0..3).all(|index| match &cards[index] {
+                BingoCard::Won(_) => { unreachable!() }
+                BingoCard::Unfinished(c) => { 
+                    c.contained_numbers.iter().map(|x| match x {
+                        BingoNumberState::Crossed(_) => { unreachable!() }
+                        BingoNumberState::NotCrossed( BingoNumber{ value , .. }) => { value }
+                    }).eq(get_day4_parsed_field_numbers(index).iter())
                 }
-                else {
-                    None
+            }));
+            assert_eq!(match &cards[1] {
+                BingoCard::Won(_) => { unreachable!() }
+                BingoCard::Unfinished(c) => {
+                    c.contained_numbers.iter().find_map(|x| {
+                        if let BingoNumberState::NotCrossed( BingoNumber{value, column, row}) = x{
+                            if *value == 17{ Some((row, column)) } else { None}
+                        }
+                        else {
+                            None
+                        }
+                    }).unwrap()
                 }
-            }).unwrap(), (&1,&3))
+            }, (&1,&3))
         }   
         
         #[test]
-        fn test_day3_cross_number_in_bingo_card() {
+        fn test_day4_cross_number_in_bingo_card() {
             println!("This test relies on test_day3_parse_bingo_game passing. If both fail, fix test_day3_parse_bingo_game first!");
             let game = parse_bingo_game(get_day_4_string_testdata());
             let mut game = game.unwrap();
-            assert!(game.cards[0].contained_numbers.iter().all(|x| match x {
-                BingoNumberState::Crossed(_) => {false}
-                BingoNumberState::NotCrossed(_) => {true}
-            }));
+            assert!(match &game.cards[0] {
+                BingoCard::Won(_) => { unreachable!() }
+                BingoCard::Unfinished(c) => {
+                    c.contained_numbers.iter().all(|x| match x {
+                        BingoNumberState::Crossed(_) => {false}
+                        BingoNumberState::NotCrossed(_) => {true} 
+                    })
+                }
+            });
             let new_card = game.cards.remove(0).cross_number(150);
-            assert!(new_card.contained_numbers.iter().all(|x| match x {
-                BingoNumberState::Crossed(_) => {false}
-                BingoNumberState::NotCrossed(_) => {true}
-            }));
+            assert!(match &new_card {
+                BingoCard::Won(_) => { unreachable!() }
+                BingoCard::Unfinished(c) => {
+                    c.contained_numbers.iter().all(|x| match x {
+                        BingoNumberState::Crossed(_) => {false}
+                        BingoNumberState::NotCrossed(_) => {true} 
+                    })
+                }
+            });
             let new_card = new_card.cross_number(24);
-            assert_eq!(new_card.contained_numbers.iter().filter(|x| match x {
-                BingoNumberState::Crossed(_) => {false}
-                BingoNumberState::NotCrossed(_) => {true}
-            }).count(), 24);
-            let record = new_card.contained_numbers.iter().find(|x| match x {
-                BingoNumberState::Crossed(_) => {true}
-                BingoNumberState::NotCrossed(_) => {false}
-            }).unwrap();
+            assert_eq!(match &new_card {
+                BingoCard::Won(_) => { unreachable!() }
+                BingoCard::Unfinished(c) => { 
+                    c.contained_numbers.iter().filter(|x| match x {
+                        BingoNumberState::Crossed(_) => {false}
+                        BingoNumberState::NotCrossed(_) => {true}
+                    }).count()
+                }
+            }, 24);
+            let record = match &new_card {
+                BingoCard::Won(_) => { unreachable!() }
+                BingoCard::Unfinished(c) => {
+                    c.contained_numbers.iter().find(|x| match x {
+                        BingoNumberState::Crossed(_) => {true}
+                        BingoNumberState::NotCrossed(_) => {false}
+                    }).unwrap()
+                }
+            };
             match record {
                 BingoNumberState::Crossed(BingoNumber{value, row, column}) => {
                     assert_eq!(value, &24);
@@ -291,19 +345,44 @@ mod bingo_internals {
                 BingoNumberState::NotCrossed(_) => { unreachable!() }
             };
         }
+
+        #[test]
+        fn test_day5_win_card() {
+            println!("This test relies on test_day3_parse_bingo_game passing. If both fail, fix test_day3_parse_bingo_game first!");
+            let game = parse_bingo_game(get_day_4_string_testdata()).unwrap();
+            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            let game = game.cross_number(2);
+            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            let game = game.cross_number(17);
+            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            let game = game.cross_number(25);
+            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            let game = game.cross_number(7);
+            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            let game = game.cross_number(24);
+            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            let game = game.cross_number(12);
+            assert_eq!(game.get_winner_cards_scores().sum::<usize>(),237);
+        }
     }
 }
 
-
+#[derive(Debug)]
 pub struct GameAndInput {
     game : BingoGame,
     input : Vec<u8>,
 }
 
 #[derive(Debug)]
+pub struct WinnerNumberAndScore {
+    number : usize,
+    score : usize,
+}
+
+#[derive(Debug)]
 pub enum BingoGameSolutionError {
     InsufficientInput { current_game_state : BingoGame },
-    Tie { winners : Vec<usize> }
+    Tie { winners : Vec<WinnerNumberAndScore> }
 }
 
 impl Display for BingoGameSolutionError {
@@ -313,8 +392,8 @@ impl Display for BingoGameSolutionError {
                 write!(f, "The game is not completed. The returned error contains the current state, you can continue the game if you have more input")
             }
             BingoGameSolutionError::Tie{ winners } => {
-                write!(f, "There has been a tie. The following players finished the same turn:")?;
-                winners.iter().try_for_each(|i| write!(f, " {}", i))
+                write!(f, "There has been a tie. The following players finished the same turn with score:")?;
+                winners.iter().try_for_each(|i| write!(f, " {} {}", i.number, i.score))
             }
         }
     }
@@ -344,24 +423,15 @@ pub fn input_generator<'c>(input : &'c str) -> Result<GameAndInput, BingoGameCre
 }
 
 #[aoc(day4, part1)]
-pub fn solve_part1(input : &GameAndInput) -> Result<u32, BingoGameSolutionError> {
+pub fn solve_part1(input : &GameAndInput) -> Result<usize, BingoGameSolutionError> {
     use std::ops::ControlFlow as Cf;
     let result = input.input.iter().try_fold(input.game.clone(),|game, value| {
         let game = game.cross_number(*value);
-        let winners = game.get_winner_cards();
-        let winners_clone = winners.clone();
-        //enum the winners, to see if the last one has index 0
-        let last_winner = winners.enumerate().last();
-        match last_winner {
-            Some((index, card)) => {
-                if index == 0 {
-                    Cf::Break(Ok((*value as u32) * (card.get_score() as u32)))
-                }
-                else {
-                    Cf::Break(Err(BingoGameSolutionError::Tie{ winners : winners_clone.enumerate().map(|w| w.0).collect()}))
-                }
-            }
-            None => { drop(last_winner); drop(winners_clone); Cf::Continue(game) }
+        let winners = game.get_winner_cards_scores().enumerate().map(|(number, score)| WinnerNumberAndScore{number, score : score * (*value as usize)}).collect::<Vec<_>>();
+        match winners.len() {
+            0 => { Cf::Continue(game) }
+            1 => { Cf::Break(Ok(winners[0].score)) }
+            _ => { Cf::Break(Err(BingoGameSolutionError::Tie{ winners : winners })) }
         }
     });
     match result {
@@ -370,8 +440,10 @@ pub fn solve_part1(input : &GameAndInput) -> Result<u32, BingoGameSolutionError>
     }
 }
 
+
 #[cfg(test)]
 pub mod tests{
+    use super::*;
     pub fn get_day_4_string_testdata() -> &'static str {
 r#"7,4,9,5,11,17,23,2,0,14,21,24,10,16,13,6,15,25,12,22,18,20,8,19,3,26,1
 
@@ -404,5 +476,11 @@ r#"7,4,9,5,11,17,23,2,0,14,21,24,10,16,13,6,15,25,12,22,18,20,8,19,3,26,1
         &[[22,13,17,11,0,8,2,23,4,24,21,9,14,16,7,6,10,3,18,5,1,12,20,15,19],
         [3,15,0,2,22,9,18,13,17,5,19,8,7,25,23,20,11,10,24,4,14,21,16,12,6],
         [14,21,17,24,4,10,16,15,9,19,18,8,23,26,20,22,11,13,6,5,2,0,12,3,7],][index]
+    }
+
+    #[test]
+    pub fn test_day4_solve_part1() {
+        let testdata = input_generator(get_day_4_string_testdata()).unwrap();
+        assert_eq!(solve_part1(&testdata).unwrap(), 4512)
     }
 }
