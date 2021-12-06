@@ -1,5 +1,6 @@
 use aoc_runner_derive::*;
 use std::fmt::{Display,Formatter};
+use std::borrow::Borrow;
 use std::error::Error;
 use bingo_internals::*;
 
@@ -245,9 +246,17 @@ mod bingo_internals {
             Self{ cards : self.cards.into_iter().map(|x| x.cross_number(value)).collect() }
         }
 
-        pub fn get_winner_cards_scores(&self) -> impl Iterator<Item=usize>+Clone+'_ {
-            self.cards.iter().filter_map(|x| x.get_score())
+        pub fn get_winner_cards_scores_ascending(&self) -> impl Iterator<Item=WinnerNumberAndCardScore>+Clone+'_ {
+            self.cards.iter().enumerate().filter_map(|(winner_number, card)| card.get_score().map(|card_score| WinnerNumberAndCardScore { winner_number, card_score}))
         }
+        pub fn get_number_of_cards_in_game(&self) -> usize {
+            self.cards.len()
+        }
+    }
+
+    pub struct WinnerNumberAndCardScore {
+        pub winner_number : usize,
+        pub card_score : usize,
     }
 
     #[cfg(test)]
@@ -350,19 +359,19 @@ mod bingo_internals {
         fn test_day5_win_card() {
             println!("This test relies on test_day3_parse_bingo_game passing. If both fail, fix test_day3_parse_bingo_game first!");
             let game = parse_bingo_game(get_day_4_string_testdata()).unwrap();
-            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            assert_eq!(game.get_winner_cards_scores_ascending().count(), 0);
             let game = game.cross_number(2);
-            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            assert_eq!(game.get_winner_cards_scores_ascending().count(), 0);
             let game = game.cross_number(17);
-            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            assert_eq!(game.get_winner_cards_scores_ascending().count(), 0);
             let game = game.cross_number(25);
-            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            assert_eq!(game.get_winner_cards_scores_ascending().count(), 0);
             let game = game.cross_number(7);
-            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            assert_eq!(game.get_winner_cards_scores_ascending().count(), 0);
             let game = game.cross_number(24);
-            assert_eq!(game.get_winner_cards_scores().count(), 0);
+            assert_eq!(game.get_winner_cards_scores_ascending().count(), 0);
             let game = game.cross_number(12);
-            assert_eq!(game.get_winner_cards_scores().sum::<usize>(),237);
+            assert_eq!(game.get_winner_cards_scores_ascending().map(|WinnerNumberAndCardScore { card_score,.. }| card_score).sum::<usize>(),237);
         }
     }
 }
@@ -375,7 +384,7 @@ pub struct GameAndInput {
 
 #[derive(Debug)]
 pub struct WinnerNumberAndScore {
-    number : usize,
+    winner_number : usize,
     score : usize,
 }
 
@@ -393,7 +402,7 @@ impl Display for BingoGameSolutionError {
             }
             BingoGameSolutionError::Tie{ winners } => {
                 write!(f, "There has been a tie. The following players finished the same turn with score:")?;
-                winners.iter().try_for_each(|i| write!(f, " {} {}", i.number, i.score))
+                winners.iter().try_for_each(|i| write!(f, " {} {}", i.winner_number, i.score))
             }
         }
     }
@@ -427,7 +436,9 @@ pub fn solve_part1(input : &GameAndInput) -> Result<usize, BingoGameSolutionErro
     use std::ops::ControlFlow as Cf;
     let result = input.input.iter().try_fold(input.game.clone(),|game, value| {
         let game = game.cross_number(*value);
-        let winners = game.get_winner_cards_scores().enumerate().map(|(number, score)| WinnerNumberAndScore{number, score : score * (*value as usize)}).collect::<Vec<_>>();
+        let winners = game.get_winner_cards_scores_ascending()
+            .map(|WinnerNumberAndCardScore {winner_number, card_score}| WinnerNumberAndScore{winner_number, score : card_score * (*value as usize)})
+            .collect::<Vec<_>>();
         match winners.len() {
             0 => { Cf::Continue(game) }
             1 => { Cf::Break(Ok(winners[0].score)) }
@@ -437,6 +448,73 @@ pub fn solve_part1(input : &GameAndInput) -> Result<usize, BingoGameSolutionErro
     match result {
         Cf::Continue(g) => { Err(BingoGameSolutionError::InsufficientInput{current_game_state : g})}
         Cf::Break(score) => { score }
+    }
+}
+
+fn run_game_until_only_one_player_left<T,Q>(game : BingoGame, mut input : T) -> Result<(BingoGame, T), BingoGameSolutionError>
+    where T : Iterator<Item=Q>,
+          Q : Borrow<u8>
+{
+    use std::ops::ControlFlow as Cf;
+    let card_count = game.get_number_of_cards_in_game();
+    let game_before_last_card_finishes = input.by_ref().try_fold(game,|game, value| {
+        let game = game.cross_number(*(value.borrow()));
+        let winners = game.get_winner_cards_scores_ascending().count();
+        match winners {
+            x if x < card_count-1 => { Cf::Continue(game) }
+            x if x == card_count-1 => { Cf::Break(Ok(game)) }
+            _ => { 
+                Cf::Break(Err(BingoGameSolutionError::Tie{ 
+                    winners : game.get_winner_cards_scores_ascending().map( |WinnerNumberAndCardScore {winner_number, card_score}| {
+                        WinnerNumberAndScore{
+                            winner_number, 
+                            score : card_score * (*(value.borrow()) as usize)}
+                        }).collect::<Vec<_>>() 
+                }))
+            }
+        }
+    });
+    match game_before_last_card_finishes {
+        Cf::Continue(g) => { Err(BingoGameSolutionError::InsufficientInput{current_game_state : g})}
+        Cf::Break(g) => { g.map(|g| (g,input)) }
+    }
+}
+
+fn find_first_player_that_hasnt_won(game : &BingoGame) -> Option<usize> {
+    game.get_winner_cards_scores_ascending()
+        .cycle()
+        .take(game.get_number_of_cards_in_game())
+        .enumerate()
+        .find_map(|(index, WinnerNumberAndCardScore{winner_number, ..})| {
+            if index != winner_number { Some(index) } else { None }
+        })
+}
+
+#[aoc(day4, part2)]
+pub fn solve_part2(input : &GameAndInput) -> Result<usize, BingoGameSolutionError> {
+    use std::ops::ControlFlow as Cf;
+    let (game_before_last_card_finishes, mut input_iterator) = run_game_until_only_one_player_left(input.game.clone(), input.input.iter())?;
+    //we can just unwrap here, as the case that there are no players left has been handled by the ?
+    //operator on the previous line
+    let player_that_hasnt_won = find_first_player_that_hasnt_won(&game_before_last_card_finishes).unwrap(); 
+    let result = input_iterator.try_fold(game_before_last_card_finishes, | game, value | {
+        let game = game.cross_number(*value);
+        let last_player = game.get_winner_cards_scores_ascending().find_map(|WinnerNumberAndCardScore{winner_number, card_score}| {
+            if winner_number == player_that_hasnt_won {
+                Some(card_score * (*value as usize))
+            }
+            else {
+                None
+            }
+        });
+        match last_player {
+            Some(score) => { Cf::Break(score) }
+            None => { Cf::Continue(game) }
+        }
+    });
+    match result {
+        Cf::Continue(current_game_state) => { Err(BingoGameSolutionError::InsufficientInput{current_game_state}) }
+        Cf::Break(score) => { Ok(score) }
     }
 }
 
@@ -482,5 +560,11 @@ r#"7,4,9,5,11,17,23,2,0,14,21,24,10,16,13,6,15,25,12,22,18,20,8,19,3,26,1
     pub fn test_day4_solve_part1() {
         let testdata = input_generator(get_day_4_string_testdata()).unwrap();
         assert_eq!(solve_part1(&testdata).unwrap(), 4512)
+    }
+
+    #[test]
+    pub fn test_day4_solve_part2() {
+        let testdata = input_generator(get_day_4_string_testdata()).unwrap();
+        assert_eq!(solve_part2(&testdata).unwrap(), 1924)
     }
 }
