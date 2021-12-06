@@ -21,6 +21,15 @@ pub fn solve_part1_iterators(input : &Vec<u32>) -> usize {
     input.iter().skip(1).zip(input.iter()).filter(|(new, old)| new > old).count()
 }
 
+#[aoc(day1, part2, ItTookMeWayTooLongToRealizeThis)]
+pub fn solve_part2_correct_solution(input : &Vec<u32>) -> usize {
+    input.iter().skip(3).zip(input.iter()).filter(|(new, old)| new > old).count()
+}
+
+//--------------------------------------------------------------------------------------------
+//let's not talk about the stuff below. It's just here for reference. Because it took me way too
+//long to realize that part 2 is just part 1 with a different offset...
+
 #[aoc(day1, part2, InternalState)]
 pub fn solve_part2(input : &Vec<u32>) -> usize {
     let floating_window :u32 = input.iter().take(3).sum();
@@ -192,3 +201,5 @@ pub fn solve_part2_accumulator_infallible(input : &Vec<u32>) -> Option<u32> {
         }
     )
 }
+
+
