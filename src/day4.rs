@@ -25,7 +25,7 @@ mod bingo_internals {
     }
 
     #[derive(Debug,Clone,Copy)]
-    struct WonBingoCard{
+    pub struct WonBingoCard{
         score : usize,
         round : usize,
     }
@@ -33,6 +33,9 @@ mod bingo_internals {
     impl WonBingoCard {
         pub fn get_score(&self) -> usize {
             self.score
+        }
+        pub fn get_winning_round(&self) -> usize {
+            self.round
         }
     }
 
@@ -253,6 +256,13 @@ mod bingo_internals {
 
         pub fn get_current_round(&self) -> usize {
             self.round
+        }
+
+        pub fn get_winner_cards_ascending(&self) -> impl Iterator<Item=(usize, & WonBingoCard)>+Clone {
+            self.cards.iter().enumerate().filter_map(|(winner_number, card)| match card {
+                BingoCard::Unfinished(_) => { None }
+                BingoCard::Won(card) => { Some((winner_number, card)) }
+            })
         }
 
         pub fn get_winner_cards_scores_ascending(&self) -> impl Iterator<Item=WinnerNumberAndScore>+Clone+'_ {
@@ -489,7 +499,7 @@ fn find_first_player_that_hasnt_won(game : &BingoGame) -> Option<usize> {
         })
 }
 
-#[aoc(day4, part2)]
+#[aoc(day4, part2, StopBeforeLastPlayerFinishes)]
 pub fn solve_part2(input : &GameAndInput) -> Result<usize, BingoGameSolutionError> {
     use std::ops::ControlFlow as Cf;
     let (game_before_last_card_finishes, mut input_iterator) = run_game_until_only_one_player_left(input.game.clone(), input.input.iter())?;
@@ -514,6 +524,28 @@ pub fn solve_part2(input : &GameAndInput) -> Result<usize, BingoGameSolutionErro
     match result {
         Cf::Continue(current_game_state) => { Err(BingoGameSolutionError::InsufficientInput{current_game_state}) }
         Cf::Break(score) => { Ok(score) }
+    }
+}
+
+#[aoc(day4, part2, JustContinueAndFindOutAfter)]
+pub fn solve_part2_just_finish_and_find_out_after(input : &GameAndInput) -> Result<usize, BingoGameSolutionError> {
+    use std::cmp::max;
+    let end_state = input.input.iter().fold(input.game.clone(), |game, value| game.cross_number(*value));
+    let (winner_count, last_round_someone_won) = end_state.get_winner_cards_ascending()
+        .fold((0,0), | (winner_count, last_round_someone_won), (_, winner) | (winner_count + 1, max(last_round_someone_won, winner.get_winning_round())));
+    if winner_count != end_state.get_number_of_cards_in_game() {
+        Err(BingoGameSolutionError::InsufficientInput { current_game_state : end_state})
+    }
+    else {
+        let mut last_winners = end_state.get_winner_cards_ascending()
+            .filter(|(_, winner)| winner.get_winning_round() == last_round_someone_won);
+        let last_winners_count = last_winners.clone().count();
+        if last_winners_count == 1 {
+            Ok(last_winners.next().unwrap().1.get_score())
+        }
+        else {
+            Err(BingoGameSolutionError::Tie{ winners : last_winners.map(|(winner_number, card)| WinnerNumberAndScore{ winner_number, score : card.get_score()}).collect() })
+        }
     }
 }
 
