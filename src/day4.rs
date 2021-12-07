@@ -26,7 +26,8 @@ mod bingo_internals {
 
     #[derive(Debug,Clone,Copy)]
     struct WonBingoCard{
-        score : usize
+        score : usize,
+        round : usize,
     }
 
     impl WonBingoCard {
@@ -65,7 +66,7 @@ mod bingo_internals {
                 }
             }
         }
-        fn cross_number(self, number : u8) -> BingoCard {
+        fn cross_number(self, number : u8, round : usize) -> BingoCard {
             //Sorry for this. Arrays in Rust aren't really functional-style friendly...
             //Yes, this is coding using side effects, but the API is how it is...
             let mut row_and_column = None;
@@ -80,7 +81,7 @@ mod bingo_internals {
                 let new_row_hit_count = self.rows[row as usize] + 1;
                 let new_col_hit_count = self.columns[column as usize] + 1;
                 if new_col_hit_count == 5 || new_row_hit_count == 5 {
-                    BingoCard::Won(WonBingoCard { score : Self::calc_current_score(new_state) })
+                    BingoCard::Won(WonBingoCard { score : ((number) as usize) * Self::calc_current_score(new_state), round })
                 }
                 else {
                     let mut rows = self.rows;
@@ -131,10 +132,10 @@ mod bingo_internals {
                 BingoCard::Unfinished(_) => { None }
             }
         }
-        fn cross_number(self, value : u8) -> Self {
+        fn cross_number(self, value : u8, round : usize) -> Self {
             match self {
                 BingoCard::Won(_) => { self }
-                BingoCard::Unfinished(unfinished_card) => { unfinished_card.cross_number(value) }
+                BingoCard::Unfinished(unfinished_card) => { unfinished_card.cross_number(value, round) }
             }
         }
     }
@@ -179,6 +180,7 @@ mod bingo_internals {
     #[derive(Debug, Clone)]
     pub struct BingoGame{
         cards : Vec<BingoCard>,
+        round : usize,
     }
 
     #[derive(Debug)]
@@ -237,27 +239,35 @@ mod bingo_internals {
                         Err(BingoGameCreationError::NoDataSupplied)
                     }
                     else {
-                        Ok(BingoGame{cards})
+                        Ok(BingoGame{cards, round: 0})
                     }
                 }
             }
         }
         pub fn cross_number(self, value :u8) -> Self {
-            Self{ cards : self.cards.into_iter().map(|x| x.cross_number(value)).collect() }
+            Self{ 
+                round : self.round + 1, 
+                cards : self.cards.into_iter().map(|x| x.cross_number(value, self.round)).collect()
+            }
         }
 
-        pub fn get_winner_cards_scores_ascending(&self) -> impl Iterator<Item=WinnerNumberAndCardScore>+Clone+'_ {
-            self.cards.iter().enumerate().filter_map(|(winner_number, card)| card.get_score().map(|card_score| WinnerNumberAndCardScore { winner_number, card_score}))
+        pub fn get_current_round(&self) -> usize {
+            self.round
+        }
+
+        pub fn get_winner_cards_scores_ascending(&self) -> impl Iterator<Item=WinnerNumberAndScore>+Clone+'_ {
+            self.cards.iter().enumerate().filter_map(|(winner_number, card)| card.get_score().map(|score| WinnerNumberAndScore { winner_number, score}))
         }
         pub fn get_number_of_cards_in_game(&self) -> usize {
             self.cards.len()
         }
     }
-
-    pub struct WinnerNumberAndCardScore {
+    #[derive(Debug)]
+    pub struct WinnerNumberAndScore {
         pub winner_number : usize,
-        pub card_score : usize,
+        pub score : usize,
     }
+
 
     #[cfg(test)]
     mod tests {
@@ -316,7 +326,7 @@ mod bingo_internals {
                     })
                 }
             });
-            let new_card = game.cards.remove(0).cross_number(150);
+            let new_card = game.cards.remove(0).cross_number(150, 0);
             assert!(match &new_card {
                 BingoCard::Won(_) => { unreachable!() }
                 BingoCard::Unfinished(c) => {
@@ -326,7 +336,7 @@ mod bingo_internals {
                     })
                 }
             });
-            let new_card = new_card.cross_number(24);
+            let new_card = new_card.cross_number(24, 1);
             assert_eq!(match &new_card {
                 BingoCard::Won(_) => { unreachable!() }
                 BingoCard::Unfinished(c) => { 
@@ -371,7 +381,7 @@ mod bingo_internals {
             let game = game.cross_number(24);
             assert_eq!(game.get_winner_cards_scores_ascending().count(), 0);
             let game = game.cross_number(12);
-            assert_eq!(game.get_winner_cards_scores_ascending().map(|WinnerNumberAndCardScore { card_score,.. }| card_score).sum::<usize>(),237);
+            assert_eq!(game.get_winner_cards_scores_ascending().map(|WinnerNumberAndScore { score,.. }| score).sum::<usize>(),237*12);
         }
     }
 }
@@ -380,12 +390,6 @@ mod bingo_internals {
 pub struct GameAndInput {
     game : BingoGame,
     input : Vec<u8>,
-}
-
-#[derive(Debug)]
-pub struct WinnerNumberAndScore {
-    winner_number : usize,
-    score : usize,
 }
 
 #[derive(Debug)]
@@ -437,7 +441,6 @@ pub fn solve_part1(input : &GameAndInput) -> Result<usize, BingoGameSolutionErro
     let result = input.input.iter().try_fold(input.game.clone(),|game, value| {
         let game = game.cross_number(*value);
         let winners = game.get_winner_cards_scores_ascending()
-            .map(|WinnerNumberAndCardScore {winner_number, card_score}| WinnerNumberAndScore{winner_number, score : card_score * (*value as usize)})
             .collect::<Vec<_>>();
         match winners.len() {
             0 => { Cf::Continue(game) }
@@ -465,11 +468,7 @@ fn run_game_until_only_one_player_left<T,Q>(game : BingoGame, mut input : T) -> 
             x if x == card_count-1 => { Cf::Break(Ok(game)) }
             _ => { 
                 Cf::Break(Err(BingoGameSolutionError::Tie{ 
-                    winners : game.get_winner_cards_scores_ascending().map( |WinnerNumberAndCardScore {winner_number, card_score}| {
-                        WinnerNumberAndScore{
-                            winner_number, 
-                            score : card_score * (*(value.borrow()) as usize)}
-                        }).collect::<Vec<_>>() 
+                    winners : game.get_winner_cards_scores_ascending().collect::<Vec<_>>() 
                 }))
             }
         }
@@ -485,7 +484,7 @@ fn find_first_player_that_hasnt_won(game : &BingoGame) -> Option<usize> {
         .cycle()
         .take(game.get_number_of_cards_in_game())
         .enumerate()
-        .find_map(|(index, WinnerNumberAndCardScore{winner_number, ..})| {
+        .find_map(|(index, WinnerNumberAndScore{winner_number, ..})| {
             if index != winner_number { Some(index) } else { None }
         })
 }
@@ -499,9 +498,9 @@ pub fn solve_part2(input : &GameAndInput) -> Result<usize, BingoGameSolutionErro
     let player_that_hasnt_won = find_first_player_that_hasnt_won(&game_before_last_card_finishes).unwrap(); 
     let result = input_iterator.try_fold(game_before_last_card_finishes, | game, value | {
         let game = game.cross_number(*value);
-        let last_player = game.get_winner_cards_scores_ascending().find_map(|WinnerNumberAndCardScore{winner_number, card_score}| {
+        let last_player = game.get_winner_cards_scores_ascending().find_map(|WinnerNumberAndScore{winner_number, score}| {
             if winner_number == player_that_hasnt_won {
-                Some(card_score * (*value as usize))
+                Some(score )
             }
             else {
                 None
