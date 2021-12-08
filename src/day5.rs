@@ -40,13 +40,9 @@ enum AxisAlignedLine {
     }
 }
 
-impl AxisAlignedLine {
-    fn iter(&self) -> AxisAlignedLineIterator<&AxisAlignedLine> {
-        AxisAlignedLineIterator{
-            line : self,
-            index : 0,
-        }
-    }
+impl std::iter::IntoIterator for AxisAlignedLine {
+    type Item = Point;
+    type IntoIter = AxisAlignedLineIterator<AxisAlignedLine>;
     fn into_iter(self) -> AxisAlignedLineIterator<AxisAlignedLine> {
         AxisAlignedLineIterator {
             line :self,
@@ -175,17 +171,9 @@ impl TryFrom<&Line> for AlignedLine {
     }
 }
 
-impl AlignedLine {
-    fn iter(&self) -> AlignedLineIterator<&DiagonalLine, &AxisAlignedLine> {
-        match self {
-            AlignedLine::AxisAligned(axis_aligned_line) => {
-                AlignedLineIterator::Aligned(axis_aligned_line.iter())
-            }
-            AlignedLine::Diagonal(line) => {
-                AlignedLineIterator::Diagonal { line,  index : 0 }
-            }
-        }
-    }
+impl std::iter::IntoIterator for  AlignedLine {
+    type Item=Point;
+    type IntoIter = AlignedLineIterator<DiagonalLine,AxisAlignedLine>;
     fn into_iter(self) -> AlignedLineIterator<DiagonalLine, AxisAlignedLine> {
         match self {
             AlignedLine::AxisAligned(axis_aligned_line) => {
@@ -308,15 +296,13 @@ pub fn input_generator(input : &str) -> Result<Vec<Line>, LineParsingError> {
         )
 }
 
-fn solve_day5_with_map<'a, T,Q,I>(lines : &'a Vec<Line>, map : T) -> usize
-    where T : Fn(Q)-> I,
-          I : Iterator<Item=Point>,
-          Q : TryFrom<&'a Line>
+fn solve_day5_with_type<'a, T>(lines : &'a Vec<Line>) -> usize
+    where T : IntoIterator<Item=Point>+TryFrom<&'a Line>,
 {
     use std::collections::hash_map::HashMap as Map;
     let hit_locations = lines.iter()
         .filter_map(|line| line.try_into().ok())
-        .flat_map(map);
+        .flat_map(|line : T| line.into_iter());
     let hit_counts = hit_locations.fold(Map::new(), |mut map, point| {
         map.entry(point).and_modify(|x| *x+=1).or_insert(1);
         map
@@ -327,12 +313,12 @@ fn solve_day5_with_map<'a, T,Q,I>(lines : &'a Vec<Line>, map : T) -> usize
 
 #[aoc(day5, part1, Plotted)]
 pub fn solve_day5_part1_plotted(lines : &Vec<Line>) -> usize {
-    solve_day5_with_map(lines, |axis_aligned_line : AxisAlignedLine| axis_aligned_line.into_iter())
+    solve_day5_with_type::<AxisAlignedLine>(lines)
 }
 
 #[aoc(day5, part2, Plotted)]
 pub fn solve_day5_part2_plotted(lines : &Vec<Line>) -> usize {
-    solve_day5_with_map(lines, |aligned_line : AlignedLine| aligned_line.into_iter())
+    solve_day5_with_type::<AlignedLine>(lines)
 }
 
 #[cfg(test)]
