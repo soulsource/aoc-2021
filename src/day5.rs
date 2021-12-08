@@ -126,6 +126,114 @@ impl TryFrom<&Line> for AxisAlignedLine {
     }
 }
 
+#[derive(Debug)]
+struct DiagonalLine {
+    start : Point,
+    length : usize,
+    y_negative : bool,
+}
+
+#[derive(Debug)]
+enum AlignedLine {
+    AxisAligned(AxisAlignedLine),
+    Diagonal(DiagonalLine), 
+}
+
+#[derive(Debug)]
+struct NotAlignedError;
+impl Display for NotAlignedError {
+    fn fmt(&self, f : &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(f, "Line neither axis aligned nor 45° diagonal, cannot be converted to AlignedLine")
+    }
+}
+impl Error for NotAlignedError {}
+
+impl TryFrom<&Line> for AlignedLine {
+    type Error = NotAlignedError;
+    fn try_from(line : &Line) -> Result<Self, NotAlignedError> {
+        use std::cmp::{min,max};
+        if let Ok(axis_aligned) = line.try_into() {
+            Ok(Self::AxisAligned(axis_aligned))
+        }
+        else {
+            let min_x = min(line.endpoints[0].x, line.endpoints[1].x);
+            let max_x = max(line.endpoints[0].x, line.endpoints[1].x);
+            let min_y = min(line.endpoints[0].y, line.endpoints[1].y);
+            let max_y = max(line.endpoints[0].y, line.endpoints[1].y);
+            if max_y - min_y == max_x - min_x {
+                let start_index = if line.endpoints[0].x < line.endpoints[1].x { 0 } else { 1 };
+                Ok(Self::Diagonal(DiagonalLine {
+                    start : Point { x: line.endpoints[start_index].x, y: line.endpoints[start_index].y},
+                    length : max_y-min_y,
+                    y_negative : line.endpoints[1-start_index].y < line.endpoints[start_index].y,
+                }))
+            }
+            else {
+                Err(NotAlignedError)
+            }
+        }
+    }
+}
+
+impl AlignedLine {
+    fn iter(&self) -> AlignedLineIterator<&DiagonalLine, &AxisAlignedLine> {
+        match self {
+            AlignedLine::AxisAligned(axis_aligned_line) => {
+                AlignedLineIterator::Aligned(axis_aligned_line.iter())
+            }
+            AlignedLine::Diagonal(line) => {
+                AlignedLineIterator::Diagonal { line,  index : 0 }
+            }
+        }
+    }
+    fn into_iter(self) -> AlignedLineIterator<DiagonalLine, AxisAlignedLine> {
+        match self {
+            AlignedLine::AxisAligned(axis_aligned_line) => {
+                AlignedLineIterator::Aligned(axis_aligned_line.into_iter())
+            }
+            AlignedLine::Diagonal(line) => {
+                AlignedLineIterator::Diagonal { line, index : 0 }
+            }
+        }
+    }
+}
+
+enum AlignedLineIterator<T, Q>
+    where T: Borrow<DiagonalLine>,
+          Q: Borrow<AxisAlignedLine>
+{
+    Aligned(AxisAlignedLineIterator<Q>),
+    Diagonal {
+        line : T,
+        index : usize,
+    }
+}
+
+impl<T,Q> Iterator for AlignedLineIterator<T,Q> 
+    where T: Borrow<DiagonalLine>,
+          Q: Borrow<AxisAlignedLine>
+{
+    type Item = Point;
+    fn next(&mut self) -> Option<Point> {
+        match self {
+            AlignedLineIterator::Aligned(aligned_iterator) => { aligned_iterator.next() }
+            AlignedLineIterator::Diagonal { line, index : self_index } => {
+                let index = *self_index;
+                let line = (*line).borrow();
+                if index <= line.length {
+                    *self_index += 1;
+                    Some(Point {
+                        x: line.start.x + index,
+                        y: if line.y_negative { line.start.y - index } else { line.start.y + index }
+                    })
+                }
+                else {
+                    None
+                }
+            }
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum LineParsingError {
@@ -200,17 +308,31 @@ pub fn input_generator(input : &str) -> Result<Vec<Line>, LineParsingError> {
         )
 }
 
-#[aoc(day5, part1, Plotted)]
-pub fn solve_day5_part1_plotted(lines : &Vec<Line>) -> usize {
+fn solve_day5_with_map<'a, T,Q,I>(lines : &'a Vec<Line>, map : T) -> usize
+    where T : Fn(Q)-> I,
+          I : Iterator<Item=Point>,
+          Q : TryFrom<&'a Line>
+{
     use std::collections::hash_map::HashMap as Map;
     let hit_locations = lines.iter()
         .filter_map(|line| line.try_into().ok())
-        .flat_map(|axis_aligned_line : AxisAlignedLine| axis_aligned_line.into_iter());
+        .flat_map(map);
     let hit_counts = hit_locations.fold(Map::new(), |mut map, point| {
         map.entry(point).and_modify(|x| *x+=1).or_insert(1);
         map
     });
     hit_counts.iter().filter(|(_, value)| **value >= 2).count()
+
+}
+
+#[aoc(day5, part1, Plotted)]
+pub fn solve_day5_part1_plotted(lines : &Vec<Line>) -> usize {
+    solve_day5_with_map(lines, |axis_aligned_line : AxisAlignedLine| axis_aligned_line.into_iter())
+}
+
+#[aoc(day5, part2, Plotted)]
+pub fn solve_day5_part2_plotted(lines : &Vec<Line>) -> usize {
+    solve_day5_with_map(lines, |aligned_line : AlignedLine| aligned_line.into_iter())
 }
 
 #[cfg(test)]
@@ -254,6 +376,11 @@ r#"0,9 -> 5,9
     #[test]
     fn test_day5_part1_solution_plotted() {
         assert_eq!(solve_day5_part1_plotted(&get_day5_parsed_testdata()), 5)
+    }
+
+    #[test]
+    fn test_day5_part2_solution_plotted() {
+        assert_eq!(solve_day5_part2_plotted(&get_day5_parsed_testdata()), 12)
     }
 
 }
