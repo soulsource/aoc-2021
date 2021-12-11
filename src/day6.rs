@@ -267,108 +267,18 @@ fn get_progress_matrix_eigenvalues() -> [Complex; 9] {
     ]
 }
 
-fn get_progress_matrix_eigenvectors() -> Matrix<Complex,9,9> {
-    Matrix { storage : { [
-        [
-            Complex::new(0.19899984657465, -0.1896211561334271),
-            Complex::new(0.19899984657465, 0.1896211561334271),
-            Complex::new(0.2664863857010273, 0.0),
-            Complex::new(-0.009810288227828924, -0.3020749692844217),
-            Complex::new(-0.009810288227828924, 0.3020749692844217),
-            Complex::new(-0.2444548828945468, -0.2533423718859127),
-            Complex::new(-0.2444548828945468, 0.2533423718859127),
-            Complex::new(-0.3792659279170416, 0.08448995460471606),
-            Complex::new(-0.3792659279170416, -0.08448995460471606)
-        ],
-        [
-            Complex::new(-0.1190986880831869, 0.2719324316186708),
-            Complex::new(-0.1190986880831869, -0.2719324316186708),
-            Complex::new(0.290743167849794, 0.0),
-            Complex::new(0.2169577831581597, -0.2290264313610791),
-            Complex::new(0.2169577831581597, 0.2290264313610791),
-            Complex::new(0.3189044245620895, -0.1221973066562757),
-            Complex::new(0.3189044245620895, 0.1221973066562757),
-            Complex::new(-0.1098394577774974, -0.32194643376987), 
-            Complex::new(-0.1098394577774974, 0.32194643376987)
-        ], 
-        [
-            Complex::new(0.005157227848246945, -0.3205815144945338),
-            Complex::new(0.005157227848246945, 0.3205815144945338),
-            Complex::new(0.3172079107492197, 0.0),
-            Complex::new(0.32921644023662, -0.007126437606288196),
-            Complex::new(0.32921644023662, 0.007126437606288196),
-            Complex::new(-0.0118257849810276, 0.331081527121443),
-            Complex::new(-0.0118257849810276, -0.331081527121443),
-            Complex::new(0.2696397551921902, -0.1264099652316646),
-            Complex::new(0.2696397551921902, 0.1264099652316646)
-        ],
-        [
-            Complex::new(0.1286451879244679, 0.321493235676669),
-            Complex::new(0.1286451879244679, -0.321493235676669),
-            Complex::new(0.3460815928574744, 0.0),
-            Complex::new(0.2469587933800816, 0.2390686775345879),
-            Complex::new(0.2469587933800816, -0.2390686775345879),
-            Complex::new(-0.2911307584936315, -0.1361097216953978),
-            Complex::new(-0.2911307584936315, 0.1361097216953978),
-            Complex::new(0.1358210013533483, 0.2225358503734635),
-            Complex::new(0.1358210013533483, -0.2225358503734635)
-        ],
-        [
-            Complex::new(-0.2623103436214063, -0.2665640972326937),
-            Complex::new(-0.2623103436214063, 0.2665640972326937),
-            Complex::new(0.3775834865904633, 0.0),
-            Complex::new(0.003882464699551169, 0.3587545395223241),
-            Complex::new(0.003882464699551169, -0.3587545395223241),
-            Complex::new(0.2319301681252825, -0.2083294078640683),
-            Complex::new(0.2319301681252825, 0.2083294078640683),
-            Complex::new(-0.1806449439891257, 0.1395000635337823),
-            Complex::new(-0.1806449439891257, -0.1395000635337823)
-        ],
-        [
-            Complex::new(0.3725357186805364, 0.1560674488075285),
-            Complex::new(0.3725357186805364, -0.1560674488075285),
-            Complex::new(0.4119528235196378, 0.0),
-            Complex::new(-0.2633691995976155, 0.2662348200776662),
-            Complex::new(-0.2633691995976155, -0.2662348200776662),
-            Complex::new(0.098061488182526, 0.2860866634226474),
-            Complex::new(0.098061488182526, -0.2860866634226474),
-            Complex::new(-0.1386903372320934, -0.1438392442839339),
-            Complex::new(-0.1386903372320934, 0.1438392442839339)
-        ],
-        [
-            Complex::new(-0.4362230308412252,0.0),
-            Complex::new(-0.4362230308412252, 0.0),
-            Complex::new(0.4494506111435653, 0.0),
-            Complex::new(-0.3908970827922131, 0.0),
-            Complex::new(-0.3908970827922131, 0.0),
-            Complex::new(-0.2926266452874237, -0.02093116151478359),
-            Complex::new(-0.2926266452874237, 0.02093116151478359),
-            Complex::new(0.1118885064727042, -0.1344614042102196),
-            Complex::new(0.1118885064727042, 0.1344614042102196)
-        ],
-        [
-            Complex::new(0.2355352724921288, 0.007580122081110474),
-            Complex::new(0.2355352724921288, -0.007580122081110474),
-            Complex::new(0.2238752293291331, 0.0),
-            Complex::new(-0.2771386208238903, 0.01200387786755439),
-            Complex::new(-0.2771386208238903, -0.01200387786755439),
-            Complex::new(0.3741119620297071, 0.0),
-            Complex::new(0.3741119620297071, 0.0),
-            Complex::new(0.5069878940968082, 0.0),
-            Complex::new(0.5069878940968082, 0.0)
-        ],
-        [
-            Complex::new(-0.2377871721688999, 0.09074086536162872),
-            Complex::new(-0.2377871721688999, -0.09074086536162872),
-            Complex::new(0.2442533535325755, 0.0),
-            Complex::new(-0.2123489954513499, -0.1968431230236828),
-            Complex::new(-0.2123489954513499, 0.1968431230236828),
-            Complex::new(-0.1418684863318672, 0.3340361706185666),
-            Complex::new(-0.1418684863318672, -0.3340361706185666),
-            Complex::new(0.04854635659177065, 0.4411802158253109),
-            Complex::new(0.04854635659177065, -0.4411802158253109)
-        ]
-    ]}}
+fn get_sum_up_and_convert_back_vector() -> Matrix<Complex,9,1> {
+    Matrix { storage : { [[
+        Complex::new(-0.1145459811946883, 0.07104733568495293),
+        Complex::new(-0.1145459811946883, -0.07104733568495293),
+        Complex::new(2.92763456127289,0.0),
+        Complex::new(-0.3565487054184853, 0.1409909537266611),
+        Complex::new(-0.3565487054184853, -0.1409909537266611),
+        Complex::new(0.04110148491110813, 0.2102943915462188),
+        Complex::new(0.04110148491110813, -0.2102943915462188),
+        Complex::new(0.2644428467910635, 0.1610490368415846),
+        Complex::new(0.2644428467910635, -0.1610490368415846)
+    ]]}}
 }
 
 fn get_progress_matrix_inverse_eigenvectors() -> Matrix<Complex,9,9> {
@@ -573,12 +483,8 @@ mod complex_tests{
 //Now we have all numbers ready, we can actually start implementing the closed form. Took long
 //enough..
 fn get_fish_count_after_days_using_diagonal_matrices(input : Matrix<Complex, 1, 9>, days : i32) -> Complex {
-    let c1 = Complex::new(1.0,0.0);
-    let sum_up : Matrix<Complex,9,1>
-        = Matrix { storage : [[c1,c1,c1,c1,c1,c1,c1,c1,c1]] };
-
     let convert_to_diagonal_space = get_progress_matrix_inverse_eigenvectors();
-    let convert_back_to_fish_space = get_progress_matrix_eigenvectors();
+    let convert_back_to_fish_space_and_sum_up = get_sum_up_and_convert_back_vector(); 
 
     let progress_per_day = get_progress_matrix_eigenvalues();
 
@@ -586,7 +492,7 @@ fn get_fish_count_after_days_using_diagonal_matrices(input : Matrix<Complex, 1, 
 
     let progress_after_days = diag_matrix(progress_after_days);
 
-    (sum_up * convert_back_to_fish_space * progress_after_days * convert_to_diagonal_space * input)[0][0]
+    (convert_back_to_fish_space_and_sum_up * progress_after_days * convert_to_diagonal_space * input)[0][0]
 }
 
 
