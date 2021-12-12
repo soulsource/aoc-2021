@@ -112,13 +112,24 @@ impl<T, const COLUMNS : usize, const ROWS : usize> IndexMut<usize> for Matrix<T,
 fn dot<T, const R1 : usize, const C1R2 : usize, const C2 : usize>(l : Matrix<T, C1R2, R1>, r : Matrix<T, C2, C1R2>) -> Matrix<T, C2, R1> 
 where T : Copy+Add<Output=T>+Mul<Output=T>+Default+std::iter::Sum
 {
-    //the Matrix::default() call is ugly and wastes cycles, but afaict the only currently sane way to pull this
-    //off... There'd be the https://docs.rs/array-init/ crate, or I could write my own unsafe code,
-    //or use non-inline storage, but that all sounds ugly.
-   (0..R1).flat_map(|row| (0..C2).map(move |column| (row, column))).fold(Matrix::default(), |mut result, (row, column)| {
-       result[row][column] = l[row].iter().zip(0..C1R2).map(|(rv, cindex)| (rv, r[cindex][column])).map(|(&a,b)| a*b).sum();
-       result
-   })
+    use std::mem::{MaybeUninit, ManuallyDrop};
+    union ArrayInit<T, const COLUMNS :usize, const ROWS : usize> {
+            maybeinit: ManuallyDrop<[[MaybeUninit<T>; COLUMNS]; ROWS]>,
+            init: ManuallyDrop<[[T; COLUMNS];ROWS]>,
+    }
+    let storage_maybe_uninit = (0..R1).flat_map(|row| (0..C2).map(move |column| (row, column))).fold(
+        unsafe { MaybeUninit::uninit().assume_init() }, |mut result : [[MaybeUninit<T>; C2]; R1], (row, column)| {
+            result[row][column].write(l[row].iter().zip(0..C1R2).map(|(rv, cindex)| (rv, r[cindex][column])).map(|(&a,b)| a*b).sum());
+            unsafe { result[row][column].assume_init() };
+            result
+        }
+    );
+    let storage = unsafe {
+        ManuallyDrop::into_inner(ArrayInit {
+            maybeinit: ManuallyDrop::new(storage_maybe_uninit)
+        }.init)
+    };
+    Matrix { storage }
 }
 
 impl<T, const R1 : usize, const C1R2 : usize, const C2 : usize> Mul<Matrix<T, C2, C1R2>> for Matrix<T, C1R2, R1> 
@@ -384,22 +395,6 @@ fn get_progress_matrix_inverse_eigenvectors() -> Matrix<Complex,9,9> {
         ]
     ]}}
 }
-
-#[cfg(test)]
-mod eigenvector_tests{
-    use super::*;
-    #[test]
-    fn test_inverse() {
-        let a = get_progress_matrix_inverse_eigenvectors();
-        let b = get_progress_matrix_eigenvectors();
-        let should_be_unit = a*b;
-        for (row, column) in  (0..9).flat_map(|row| (0..9).map(move |column| (row, column))) {
-            assert!(should_be_unit[row][column].imag.abs() < 1e-10);
-            assert!((should_be_unit[row][column].real - if row == column {1.0} else { 0.0 }).abs() < 1e-10);
-        }
-    }
-}
-
 
 #[derive(Default, Debug, PartialEq, Copy, Clone)]
 struct Complex {
