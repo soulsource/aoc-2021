@@ -9,7 +9,7 @@ edition = "2021"
 aoc-runner = "0.3"
 aoc-runner-derive = "0.3"
 
-boxed_array_ringbuffer = { path = '../boxed_array_ringbuffer', version = '*'}
+boxed_array_ringbuffer = { git = "https://github.com/soulsource/boxed_array_ringbuffer", version = '*'}
 
 [profile.dev]
 opt-level=3
