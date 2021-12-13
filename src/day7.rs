@@ -74,9 +74,14 @@ pub fn solve_day7_part1_median(input : &Vec<usize>) -> usize {
 //f'(Δx) = Δx + 0.5*sign(Δx)
 //The 0.5*sign(Δx) "offsets" all crabs parabolas by 0.5 to the left if viewed from the right,
 //or by 0.5 to the right, if viewed from the left.
+//This is bad news for Newton, whose method got ruled out again, as it expects the minimum to
+//have approximately parabolic behaviour, but here it might again be behaving like |x|... 
+//If we were to throw Newton at the problem, he might get trapped in an infinite loop if the
+//solution happens to be at the position of a crab... In order not to risk his life, we shall
+//abstain from asking him for help.
 //
-//Still, put in words, the global minimum is there, where the sum of all distances + half the count
-//is the same on both sides.
+//Still, put in words, the global minimum is at the point, where the sum of all distances + half
+//the count of crabs is the same on both sides.
 //
 //Finding the exact point is not straightforward, but we can get a reasonably good estimate and
 //an upper bound for the error.
@@ -107,7 +112,8 @@ pub fn solve_day7_part1_median(input : &Vec<usize>) -> usize {
 //We could have gotten the same reduction in error by exploiting the quantization of the problem.
 //With full integer steps it is not possible to move "over" a crab by moving one step, at best we
 //can move "on" or "off" a crab. This already limits the maximum change of the imbalance to half
-//the number of crabs.
+//the number of crabs (as only crabs strictly left and strictly right contribute to n_left and
+//n_right).
 //
 //Now knowing that the maximum error from solving 
 //sum((x-pos[i]),i) = 0

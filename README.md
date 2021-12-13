@@ -9,3 +9,4 @@ Beware, if you haven't solved those riddles yourself, the source files are obvio
 
 # Noteable solutions:
 - Day6 has a floating-point closed-form solution that might be interesting. Details are outlined in comments in the source code. I won't write them here to avoid spoilers.
+- Day7 has solutions that are way smarter than brute-force, and are also really short. The derivation of those solutions is in the comments in the source code.
