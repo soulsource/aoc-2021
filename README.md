@@ -6,3 +6,6 @@ For instance, day6 requires the boxed_array_ringbuffer.
 # SPOILER!
 
 Beware, if you haven't solved those riddles yourself, the source files are obvious spoilers.
+
+# Noteable solutions:
+- Day6 has a floating-point closed-form solution that might be interesting. Details are outlined in comments in the source code. I won't write them here to avoid spoilers.
